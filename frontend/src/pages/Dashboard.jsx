@@ -59,7 +59,7 @@ const Dashboard = () => {
   });
 
   return (
-   <main className="min-h-screen bg-slate-950 px-6 pb-6 pt-32 md:pt-36 text-white">
+   <main className="min-h-screen bg-slate-950 px-6 pb-6 pt-48 text-white">
       <div className="mx-auto max-w-7xl">
         <div className="relative mb-8 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.02] p-8 shadow-2xl md:p-12">
           <div className="pointer-events-none absolute right-0 top-0 h-64 w-64 bg-cyan-500/10 blur-[100px]" />

@@ -32,7 +32,7 @@ const History = () => {
   });
 
   return (
-    <main className="min-h-screen bg-slate-950 p-6 pt-24 text-white">
+    <main className="min-h-screen bg-slate-950 p-6 pt-48 text-white">
       <div className="mx-auto max-w-6xl">
         <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
