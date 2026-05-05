@@ -5,6 +5,13 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: "localhost",
-    port: 5175,
+    port: 5175
   },
+  preview: {
+    host: "0.0.0.0",
+    port: Number(process.env.PORT) || 4173,
+    allowedHosts: [
+      "tranquil-respect-production-875b.up.railway.app"
+    ]
+  }
 });
