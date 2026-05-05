@@ -4,3 +4,4 @@ python-dotenv
 scikit-learn
 numpy
 pydantic
+requests>=2.31.0
