@@ -24,9 +24,8 @@ const Navbar = () => {
   );
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-4 pointer-events-none">
-      <div className="max-w-7xl mx-auto flex items-center justify-between pointer-events-auto">
-        
+    <nav className="sticky top-0 z-50 w-full px-6 py-4 bg-slate-950/90 backdrop-blur-xl border-b border-white/10">
+     <div className="max-w-7xl mx-auto flex items-center justify-between">
         {/* Left: Logo */}
         <div className="flex-shrink-0">
           <Link to="/" className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-violet-500 hover:opacity-80 transition-opacity drop-shadow-lg">
