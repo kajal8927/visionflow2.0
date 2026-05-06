@@ -30,7 +30,10 @@ export const getStoredUser = () => {
 
 export const loginUser = async (email, password) => {
   try {
-    const response = await api.post("/auth/login", { email, password });
+    const response = await api.post("/auth/login", {
+      email,
+      password,
+    });
 
     const token = response.data?.token;
     const user = response.data?.user;
@@ -49,23 +52,30 @@ export const loginUser = async (email, password) => {
   } catch (error) {
     return {
       success: false,
-      message: error.response?.data?.message || "Invalid email or password.",
+      message:
+        error.response?.data?.message ||
+        "Invalid email or password.",
     };
   }
 };
 
 export const registerUser = async (formData) => {
   try {
-    await api.post("/auth/register", formData);
+    const response = await api.post("/auth/register", formData);
 
     return {
       success: true,
-      message: "Account created successfully. Please login to continue.",
+      message:
+        response.data?.message ||
+        "Account created successfully. Please login to continue.",
+      user: response.data?.user,
     };
   } catch (error) {
     return {
       success: false,
-      message: error.response?.data?.message || "Registration failed. Please try again.",
+      message:
+        error.response?.data?.message ||
+        "Registration failed. Please try again.",
     };
   }
 };
