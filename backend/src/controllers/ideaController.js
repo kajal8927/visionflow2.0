@@ -197,18 +197,33 @@ export const createIdea = async (req, res) => {
       );
 
       aiResults = aiResponse.data;
-    } catch (aiError) {
-      console.error("FastAPI Error:", aiError.message);
+   } catch (aiError) {
+  console.error("FastAPI Error Message:", aiError.message);
 
-      aiResults = {
-        feasibilityScore: 50,
-        riskLevel: "Medium",
-        duplicatePercentage: 0,
-        roadmap: [],
-        aiFeedback: "AI engine unavailable",
-        selectionReason: "",
-      };
-    }
+  console.error(
+    "FastAPI Error Status:",
+    aiError.response?.status
+  );
+
+  console.error(
+    "FastAPI Error Data:",
+    aiError.response?.data
+  );
+
+  console.error(
+    "AI Engine URL:",
+    `${aiEngineUrl}/analyze`
+  );
+
+  aiResults = {
+    feasibilityScore: 50,
+    riskLevel: "Medium",
+    duplicatePercentage: 0,
+    roadmap: [],
+    aiFeedback: "AI engine unavailable",
+    selectionReason: "Fallback mode activated",
+  };
+}
 
     const riskPenalty =
       aiResults.riskLevel === "High"
