@@ -18,12 +18,11 @@ const allowedOrigins = [
   "http://localhost:5174",
   "http://localhost:5175",
   "http://localhost:5176",
-  process.env.FRONTEND_URL,
   process.env.CLIENT_URL,
 ].filter(Boolean);
 
 const corsOptions = {
-  origin(origin, callback) {
+   origin(origin, callback) {
     if (!origin) return callback(null, true);
 
     if (allowedOrigins.includes(origin)) {
@@ -37,7 +36,6 @@ const corsOptions = {
   allowedHeaders: ["Content-Type", "Authorization"],
 };
 
-app.use(cors(corsOptions));
 app.use(cors(corsOptions));
 
 app.use(express.json({ limit: "1mb" }));

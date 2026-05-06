@@ -4,6 +4,7 @@ import { submitIdeaApi } from "../services/ideaService.js";
 import { Loader2 } from "lucide-react";
 
 const MAX_TITLE_LENGTH = 300;
+const MIN_DESCRIPTION_LENGTH = 20;
 
 const SubmitIdea = () => {
   const navigate = useNavigate();
@@ -22,10 +23,41 @@ const SubmitIdea = () => {
 
     if (name === "title" && value.length > MAX_TITLE_LENGTH) return;
 
+    setError(null);
+
     setForm((prev) => ({
       ...prev,
       [name]: value,
     }));
+  };
+
+  const getSubmitErrorMessage = (err) => {
+    const status = err?.response?.status;
+    const apiMessage =
+      err?.response?.data?.message ||
+      err?.response?.data?.detail ||
+      err?.message;
+
+    if (status === 409) {
+      return (
+        apiMessage ||
+        "This idea already exists. Please submit a different idea."
+      );
+    }
+
+    if (status === 400) {
+      return apiMessage || "Please fill all required fields correctly.";
+    }
+
+    if (status === 401) {
+      return "Your session has expired. Please login again.";
+    }
+
+    if (status === 500) {
+      return "Server error while submitting idea. Please try again.";
+    }
+
+    return apiMessage || "Something went wrong while submitting idea.";
   };
 
   const handleSubmit = async (e) => {
@@ -50,6 +82,13 @@ const SubmitIdea = () => {
       return;
     }
 
+    if (description.length < MIN_DESCRIPTION_LENGTH) {
+      setError(
+        `Detailed description must be at least ${MIN_DESCRIPTION_LENGTH} characters.`
+      );
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -63,11 +102,12 @@ const SubmitIdea = () => {
 
       if (result.success && result.idea) {
         navigate(`/ideas/${result.idea.id || result.idea._id}`);
-      } else {
-        setError(result.message || "Failed to submit idea.");
+        return;
       }
+
+      setError(result.message || "Failed to submit idea.");
     } catch (err) {
-      setError(err?.message || "Something went wrong while submitting idea.");
+      setError(getSubmitErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -81,7 +121,8 @@ const SubmitIdea = () => {
         </h1>
 
         <p className="mb-8 text-slate-400">
-          Share your concept and let our AI engine analyze and build a roadmap for you.
+          Share your concept and let our AI engine analyze and build a roadmap
+          for you.
         </p>
 
         {error && (

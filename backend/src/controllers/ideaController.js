@@ -3,6 +3,35 @@ import axios from "axios";
 import PDFDocument from "pdfkit";
 import { compareIdeasWithAI } from "../services/aiCompareService.js";
 
+const escapeRegex = (text = "") => {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+};
+
+const normalizeText = (text = "") => {
+  return String(text).toLowerCase().trim().replace(/\s+/g, " ");
+};
+
+const buildFallbackSelectionReason = (idea, rank) => {
+  return `Selected because this idea ranked #${rank} among all submitted ideas with an idea value of ${
+    idea.ideaValue ?? "N/A"
+  }, feasibility score of ${idea.feasibilityScore ?? 0}%, duplicate score of ${
+    idea.duplicatePercentage ?? 0
+  }%, and ${idea.riskLevel || "pending"} risk.`;
+};
+
+const buildFallbackRejectionReason = (idea, rank) => {
+  return `Rejected because this idea ranked #${rank}, below the selected top 5 ideas. It needs stronger feasibility, uniqueness, impact, or lower implementation risk to be selected.`;
+};
+
+const appendSuggestionOnce = (currentFeedback = "", suggestion = "") => {
+  const cleanSuggestion = String(suggestion || "").trim();
+
+  if (!cleanSuggestion) return currentFeedback || "";
+  if ((currentFeedback || "").includes(cleanSuggestion)) return currentFeedback;
+
+  return `${currentFeedback || ""}\n\nAI Suggestion: ${cleanSuggestion}`.trim();
+};
+
 const recalculateAiComparison = async (userId) => {
   const ideas = await Idea.find({ user: userId }).sort({
     ideaValue: -1,
@@ -27,8 +56,7 @@ const recalculateAiComparison = async (userId) => {
     }
   });
 
-  // Final ranking deterministic: ideaValue highest first
-  const rankedIdeas = ideas.sort((a, b) => {
+  const rankedIdeas = [...ideas].sort((a, b) => {
     const valueDiff = (b.ideaValue || 0) - (a.ideaValue || 0);
     if (valueDiff !== 0) return valueDiff;
 
@@ -38,28 +66,31 @@ const recalculateAiComparison = async (userId) => {
   for (let i = 0; i < rankedIdeas.length; i++) {
     const idea = rankedIdeas[i];
     const aiResult = aiMap.get(idea._id.toString());
+    const rank = i + 1;
 
-    idea.rank = i + 1;
+    idea.rank = rank;
 
     if (i < 5) {
       idea.status = "selected";
       idea.selectionReason =
-        aiResult?.reason ||
-        `Selected because this idea ranked #${i + 1} among all submitted ideas based on idea value, feasibility, duplication, and risk.`;
+        aiResult?.reason?.trim() ||
+        idea.selectionReason?.trim() ||
+        buildFallbackSelectionReason(idea, rank);
+
       idea.rejectionReason = "";
     } else {
       idea.status = "rejected";
       idea.rejectionReason =
-        aiResult?.reason ||
-        `Rejected because this idea ranked #${i + 1}, below the selected top 5 ideas.`;
+        aiResult?.reason?.trim() ||
+        buildFallbackRejectionReason(idea, rank);
+
       idea.selectionReason = "";
     }
 
-    if (aiResult?.suggestion) {
-      idea.aiFeedback = `${idea.aiFeedback || ""}\n\nAI Suggestion: ${
-        aiResult.suggestion
-      }`;
-    }
+    idea.aiFeedback = appendSuggestionOnce(
+      idea.aiFeedback,
+      aiResult?.suggestion
+    );
 
     await idea.save();
   }
@@ -69,6 +100,7 @@ const recalculateAiComparison = async (userId) => {
     createdAt: -1,
   });
 };
+
 export const createIdea = async (req, res) => {
   try {
     const {
@@ -82,7 +114,10 @@ export const createIdea = async (req, res) => {
       description,
     } = req.body;
 
-    if (!title || !problemStatement || !proposedSolution || !description) {
+    const cleanTitle = normalizeText(title);
+    const cleanDescription = normalizeText(description);
+
+    if (!title?.trim() || !problemStatement?.trim() || !proposedSolution?.trim() || !description?.trim()) {
       return res.status(400).json({
         success: false,
         message:
@@ -90,9 +125,53 @@ export const createIdea = async (req, res) => {
       });
     }
 
+    // Duplicate check before AI call and before saving
+    const duplicateIdea = await Idea.findOne({
+      user: req.user._id,
+      $or: [
+        {
+          title: {
+            $regex: `^${escapeRegex(title.trim())}$`,
+            $options: "i",
+          },
+        },
+        {
+          description: {
+            $regex: `^${escapeRegex(description.trim())}$`,
+            $options: "i",
+          },
+        },
+      ],
+    });
+
+    if (duplicateIdea) {
+      return res.status(409).json({
+        success: false,
+        message: "Idea already exists",
+        duplicateIdeaId: duplicateIdea._id,
+        duplicateTitle: duplicateIdea.title,
+      });
+    }
+
     const existingIdeasData = await Idea.find({ user: req.user._id }).select(
       "title description problemStatement proposedSolution"
     );
+
+    const normalizedDuplicate = existingIdeasData.find((idea) => {
+      const oldTitle = normalizeText(idea.title);
+      const oldDescription = normalizeText(idea.description);
+
+      return oldTitle === cleanTitle || oldDescription === cleanDescription;
+    });
+
+    if (normalizedDuplicate) {
+      return res.status(409).json({
+        success: false,
+        message: "Idea already exists",
+        duplicateIdeaId: normalizedDuplicate._id,
+        duplicateTitle: normalizedDuplicate.title,
+      });
+    }
 
     const existingIdeaTexts = existingIdeasData.map((idea) =>
       `${idea.title || ""} ${idea.description || ""} ${
@@ -105,11 +184,17 @@ export const createIdea = async (req, res) => {
     try {
       const aiEngineUrl = process.env.AI_ENGINE_URL || "http://127.0.0.1:8000";
 
-      const aiResponse = await axios.post(`${aiEngineUrl}/analyze`, {
-        title,
-        description,
-        existingIdeas: existingIdeaTexts,
-      });
+      const aiResponse = await axios.post(
+        `${aiEngineUrl}/analyze`,
+        {
+          title: title.trim(),
+          description: description.trim(),
+          existingIdeas: existingIdeaTexts,
+        },
+        {
+          timeout: 30000,
+        }
+      );
 
       aiResults = aiResponse.data;
     } catch (aiError) {
@@ -121,6 +206,7 @@ export const createIdea = async (req, res) => {
         duplicatePercentage: 0,
         roadmap: [],
         aiFeedback: "AI engine unavailable",
+        selectionReason: "",
       };
     }
 
@@ -131,29 +217,30 @@ export const createIdea = async (req, res) => {
         ? 10
         : 0;
 
-    const ideaValue =
+    const ideaValue = Math.round(
       (aiResults.feasibilityScore || 0) -
-      (aiResults.duplicatePercentage || 0) -
-      riskPenalty;
+        (aiResults.duplicatePercentage || 0) -
+        riskPenalty
+    );
 
     const idea = await Idea.create({
       user: req.user._id,
-      title,
+      title: title.trim(),
       category,
-      problemStatement,
-      proposedSolution,
+      problemStatement: problemStatement.trim(),
+      proposedSolution: proposedSolution.trim(),
       targetUsers,
       budget,
       timeline,
-      description,
+      description: description.trim(),
       feasibilityScore: aiResults.feasibilityScore || 0,
       riskLevel: aiResults.riskLevel || "Medium",
       duplicatePercentage: aiResults.duplicatePercentage || 0,
-      roadmap: aiResults.roadmap || [],
+      roadmap: Array.isArray(aiResults.roadmap) ? aiResults.roadmap : [],
       aiFeedback: aiResults.aiFeedback || "AI analysis pending.",
       status: "pending",
       ideaValue,
-      selectionReason: "",
+      selectionReason: aiResults.selectionReason || "",
       rejectionReason: "",
     });
 
@@ -162,7 +249,6 @@ export const createIdea = async (req, res) => {
     } catch (compareError) {
       console.error("OpenRouter AI Compare Error:", compareError.message);
 
-      idea.selectionReason = "";
       idea.rejectionReason =
         "Idea submitted successfully, but AI comparison failed. Please run AI comparison again.";
       await idea.save();
@@ -324,23 +410,19 @@ export const generateIdeaReport = async (req, res) => {
 
     doc.pipe(res);
 
-    doc
-      .fontSize(24)
-      .fillColor("#222222")
-      .text("VisionFlow Idea Report", { align: "center" });
+    doc.fontSize(24).fillColor("#222222").text("VisionFlow Idea Report", {
+      align: "center",
+    });
 
     doc.moveDown(1.5);
 
     doc.fontSize(20).fillColor("#0284c7").text(idea.title);
 
-    doc
-      .fontSize(12)
-      .fillColor("#64748b")
-      .text(
-        `Category: ${idea.category}  |  Status: ${idea.status.toUpperCase()}  |  Rank: ${
-          idea.rank ? `#${idea.rank}` : "N/A"
-        }`
-      );
+    doc.fontSize(12).fillColor("#64748b").text(
+      `Category: ${idea.category}  |  Status: ${idea.status.toUpperCase()}  |  Rank: ${
+        idea.rank ? `#${idea.rank}` : "N/A"
+      }`
+    );
 
     doc.moveDown();
 
@@ -350,16 +432,10 @@ export const generateIdeaReport = async (req, res) => {
     const currentY = doc.y + 15;
 
     doc.fontSize(10).text("Idea Value", 70, currentY);
-    doc
-      .fontSize(14)
-      .fillColor("#0ea5e9")
-      .text(idea.ideaValue ?? "N/A", 70, currentY + 15);
+    doc.fontSize(14).fillColor("#0ea5e9").text(idea.ideaValue ?? "N/A", 70, currentY + 15);
 
     doc.fontSize(10).fillColor("#0f172a").text("Feasibility", 170, currentY);
-    doc
-      .fontSize(14)
-      .fillColor("#22c55e")
-      .text(`${idea.feasibilityScore ?? 0}%`, 170, currentY + 15);
+    doc.fontSize(14).fillColor("#22c55e").text(`${idea.feasibilityScore ?? 0}%`, 170, currentY + 15);
 
     doc.fontSize(10).fillColor("#0f172a").text("Risk Level", 270, currentY);
 
@@ -370,16 +446,10 @@ export const generateIdeaReport = async (req, res) => {
         ? "#f59e0b"
         : "#22c55e";
 
-    doc
-      .fontSize(14)
-      .fillColor(riskColor)
-      .text(idea.riskLevel || "Pending", 270, currentY + 15);
+    doc.fontSize(14).fillColor(riskColor).text(idea.riskLevel || "Pending", 270, currentY + 15);
 
     doc.fontSize(10).fillColor("#0f172a").text("Duplicate %", 370, currentY);
-    doc
-      .fontSize(14)
-      .fillColor("#0f172a")
-      .text(`${idea.duplicatePercentage ?? 0}%`, 370, currentY + 15);
+    doc.fontSize(14).fillColor("#0f172a").text(`${idea.duplicatePercentage ?? 0}%`, 370, currentY + 15);
 
     doc.moveDown(3);
 

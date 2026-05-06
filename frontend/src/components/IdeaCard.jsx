@@ -49,7 +49,10 @@ const IdeaCard = ({ idea }) => {
           <div className="rounded-lg border border-white/5 bg-black/20 p-2">
             <div className="mb-1 text-slate-500">Idea Value</div>
             <div className="font-bold text-slate-200">
-              {idea.ideaValue ?? "N/A"}
+             {Number.isFinite(Number(idea?.ideaValue))
+  ? Math.round(Number(idea.ideaValue))
+  : "N/A"}
+  
             </div>
           </div>
 

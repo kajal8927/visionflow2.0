@@ -72,7 +72,7 @@ const IdeaDetails = () => {
   const isRejected = idea.status === "rejected";
 
   return (
-    <main className="min-h-screen bg-slate-950 p-6 pt-48 text-white">
+     <main className="min-h-screen bg-slate-950 p-6 pt-48 text-white">
       <div className="mx-auto max-w-4xl">
         <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <Link
@@ -165,7 +165,10 @@ const IdeaDetails = () => {
                         Idea Value
                       </h3>
                       <div className="text-xl font-black text-cyan-400">
-                        {idea?.ideaValue ?? "N/A"}
+                        {Number.isFinite(Number(idea?.ideaValue))
+  ? Number(idea.ideaValue).toFixed(2)
+  : "N/A"}
+  
                       </div>
                     </div>
 
